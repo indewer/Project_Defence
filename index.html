@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Пресс Челлендж</title>
+	<script src="https://telegram.org/js/telegram-web-app.js"></script>
+	<style>
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+			background-color: var(--tg-theme-bg-color, #fff);
+			color: var(--tg-theme-text-color, #000);
+			text-align: center;
+			padding: 20px;
+		}
+		h2 { margin-top: 0; }
+		.circle-container { display: flex; justify-content: center; gap: 15px; margin: 30px 0; }
+		.circle {
+			width: 90px; height: 90px; border-radius: 50%;
+			background-color: #f0f0f0; border: 4px solid #ddd;
+			display: flex; align-items: center; justify-content: center;
+			font-size: 32px; font-weight: bold; cursor: pointer;
+			transition: all 0.2s ease;
+			user-select: none;
+		}
+		.circle:active { transform: scale(0.95); }
+		.circle.active {
+			background-color: #4CAF50;
+			color: white;
+			border-color: #2E7D32;
+			box-shadow: 0 4px 10px rgba(76, 175, 80, 0.4);
+		}
+		.input-group { margin: 20px 0; }
+		input[type="number"] {
+			padding: 12px; font-size: 20px; width: 80px; text-align: center;
+			border-radius: 12px; border: 2px solid #ccc;
+			background: var(--tg-theme-secondary-bg-color, #fff);
+			color: var(--tg-theme-text-color, #000);
+		}
+		button {
+			padding: 12px 24px; font-size: 18px; font-weight: bold;
+			background-color: var(--tg-theme-button-color, #2196F3);
+			color: var(--tg-theme-button-text-color, #fff);
+			border: none; border-radius: 12px; cursor: pointer;
+			margin-top: 10px; width: 100%;
+		}
+		button:active { opacity: 0.8; }
+		table { width: 100%; border-collapse: collapse; margin-top: 30px; font-size: 14px; }
+		th, td { padding: 10px; text-align: left; border-bottom: 1px solid rgba(0,0,0,0.1); }
+		th { opacity: 0.6; font-weight: normal; }
+		.rank-1 { color: #FFD700; }
+		.rank-2 { color: #C0C0C0; }
+		.rank-3 { color: #CD7F32; }
+		.loader { font-size: 12px; opacity: 0.7; margin-top: 5px; }
+	</style>
+</head>
+<body>
+	<h2>🔥 Пресс к лету</h2>
+	<p>Подходов по 10 раз сегодня:</p>
+	
+	<div class="circle-container">
+		<div id="statusCircle" class="circle" onclick="focusInput()">0</div>
+	</div>
+	
+	<div class="input-group">
+		<input type="number" id="repsInput" min="0" placeholder="0" inputmode="numeric">
+		<br>
+		<button id="saveBtn" onclick="saveData()">СОХРАНИТЬ</button>
+		<button id="editBtn" style="display:none; margin-top:10px; background-color: #FFA500;" onclick="enableEdit()">✏️ Редактировать</button>
+		<div id="editTimer" style="font-size:12px; opacity:0.7; margin-top:5px;"></div>
+		<div id="statusMsg" class="loader"></div>
+	</div>
+	
+	<h3>🏆 Общий зачет</h3>
+	<table id="statsTable">
+		<thead>
+			<tr><th>#</th><th>Имя</th><th>Всего</th></tr>
+		</thead>
+		<tbody>
+			<tr><td colspan="3">Загрузка...</td></tr>
+		</tbody>
+	</table>
+	
+	<h3>📅 Сегодня</h3>
+	<ul id="todayList" style="list-style: none; padding: 0; font-size: 14px; opacity: 0.8;"></ul>
+
+	<script>
+		const tg = window.Telegram.WebApp;
+		tg.ready();
+		tg.expand();
+		
+		let currentUser = { id: 0, name: "Гость" };
+		let todayData = [];
+		
+		if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+			currentUser.id = tg.initDataUnsafe.user.id;
+			currentUser.name = tg.initDataUnsafe.user.first_name + (tg.initDataUnsafe.user.last_name ? ' ' + tg.initDataUnsafe.user.last_name : '');
+		} else {
+			console.warn("Запущено вне Telegram или нет данных пользователя");
+		}
+		
+		const statusMsg = document.getElementById('statusMsg');
+		const saveBtn = document.getElementById('saveBtn');
+		
+		// Загружаем статистику, потом проверяем редактирование
+		loadStats().then(() => {
+			checkEditAvailability();
+		});
+		
+		function focusInput() {
+			document.getElementById('repsInput').focus();
+		}
+		
+		async function saveData() {
+			const input = document.getElementById('repsInput');
+			const reps = input.value;
+			const circle = document.getElementById('statusCircle');
+			
+			if (reps === "") {
+				tg.showAlert("Введите количество подходов!");
+				return;
+			}
+			
+			saveBtn.disabled = true;
+			saveBtn.innerText = "Сохранение...";
+			statusMsg.innerText = "Отправка данных...";
+			
+			try {
+				const response = await fetch('/api/save', {
+					method: 'POST',
+					headers: {'Content-Type': 'application/json'},
+					body: JSON.stringify({
+						user_id: currentUser.id,
+						name: currentUser.name,
+						reps: parseInt(reps)
+					})
+				});
+				
+				const result = await response.json();
+				
+				if (response.ok && result.status === "success") {
+					circle.innerText = reps;
+					if (parseInt(reps) > 0) circle.classList.add('active');
+					else circle.classList.remove('active');
+					
+					statusMsg.innerText = "✅ Успешно сохранено!";
+					statusMsg.style.color = "green";
+					input.value = "";
+					
+					setTimeout(() => {
+						statusMsg.innerText = "";
+						saveBtn.disabled = false;
+						saveBtn.innerText = "СОХРАНИТЬ";
+						loadStats().then(() => {
+							checkEditAvailability();
+						});
+					}, 1000);
+				} else {
+					throw new Error(result.message || "Ошибка сервера");
+				}
+			} catch (error) {
+				console.error("Ошибка сохранения:", error);
+				statusMsg.innerText = "❌ Ошибка: " + error.message;
+				statusMsg.style.color = "red";
+				saveBtn.disabled = false;
+				saveBtn.innerText = "ПОПРОБОВАТЬ СНОВА";
+				tg.showAlert("Не удалось сохранить: " + error.message);
+			}
+		}
+		
+		async function loadStats() {
+			try {
+				const res = await fetch('/api/stats');
+				if (!res.ok) throw new Error("Нет связи с сервером");
+				const data = await res.json();
+				
+				renderTable(data.leaderboard);
+				renderToday(data.today);
+				
+				const myToday = data.today.find(r => r.name === currentUser.name);
+				if (myToday) {
+					document.getElementById('repsInput').value = myToday.reps;
+					const circle = document.getElementById('statusCircle');
+					circle.innerText = myToday.reps;
+					if (myToday.reps > 0) circle.classList.add('active');
+				}
+			} catch (e) {
+				console.error(e);
+				document.querySelector('#statsTable tbody').innerHTML = '<tr><td colspan="3">Ошибка загрузки</td></tr>';
+			}
+		}
+		
+		function renderTable(leaderboard) {
+			const tbody = document.querySelector('#statsTable tbody');
+			tbody.innerHTML = '';
+			
+			if (leaderboard.length === 0) {
+				tbody.innerHTML = '<tr><td colspan="3">Пока пусто. Будь первым!</td></tr>';
+				return;
+			}
+			
+			leaderboard.forEach((row, index) => {
+				let rankClass = '';
+				if (index === 0) rankClass = 'rank-1';
+				if (index === 1) rankClass = 'rank-2';
+				if (index === 2) rankClass = 'rank-3';
+				
+				const tr = `<tr class="${rankClass}"><td>${index + 1}</td><td>${row.name}</td><td>${row.total}</td></tr>`;
+				tbody.innerHTML += tr;
+			});
+		}
+		
+		function renderToday(todayStats) {
+			todayData = todayStats;
+			const list = document.getElementById('todayList');
+			list.innerHTML = '';
+			
+			if (todayStats.length === 0) {
+				list.innerHTML = '<li>Сегодня еще никто не тренировался</li>';
+				return;
+			}
+			
+			todayStats.forEach(row => {
+				list.innerHTML += `<li><b>${row.name}</b>: ${row.reps} подходов</li>`;
+			});
+		}
+		
+		async function checkEditAvailability() {
+			const userName = currentUser.name;
+			const timerDiv = document.getElementById('editTimer');
+			const editBtn = document.getElementById('editBtn');
+			
+			const myRecord = todayData.find(r => r.name === userName);
+			
+			if (!myRecord) {
+				editBtn.style.display = 'none';
+				timerDiv.textContent = '';
+				return;
+			}
+			
+			if (myRecord.can_edit) {
+				editBtn.style.display = 'inline-block';
+				timerDiv.textContent = `⏰ Можно редактировать ещё ${myRecord.minutes_left} мин.`;
+				timerDiv.style.color = '#FFA500';
+			} else {
+				editBtn.style.display = 'none';
+				timerDiv.textContent = myRecord.minutes_left === 0 ? '⏰ Время на редактирование истекло' : '';
+			}
+		}
+		
+		function enableEdit() {
+			const circle = document.getElementById('statusCircle');
+			const input = document.getElementById('repsInput');
+			const saveBtn = document.getElementById('saveBtn');
+			
+			input.value = circle.innerText || 0;
+			input.focus();
+			saveBtn.textContent = '💾 Сохранить изменения';
+			document.getElementById('editBtn').style.display = 'none';
+			document.getElementById('editTimer').textContent = '';
+			
+			tg.showAlert("Режим редактирования активирован");
+		}
+	</script>
+</body>
+</html>
