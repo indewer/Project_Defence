@@ -9,9 +9,9 @@ from aiogram.filters import Command
 from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton
 
 # КОНФИГУРАЦИЯ
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8602015046:AAHWHmI7FElRCRp0j6_LGmqPvRBX8Hd_G5c")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-WEB_APP_URL = os.getenv("WEB_APP_URL", "http://localhost:5000")
+WEB_APP_URL = os.getenv("WEB_APP_URL", "https://indewer.github.io")
 DB_PATH = "press.db"
 
 app = Flask(__name__)
