@@ -12,3 +12,6 @@ press.db
 
 # Служебные файлы VS Code
 .vscode/
+
+# Легаси
+.data_old
